@@ -15,7 +15,7 @@
 
 Начать пользоваться тренажером можно прямо сейчас!
 
-**[Перейти к VioletKey](https://sacon1s.github.io/)**
+**[Перейти к VioletKey](https://sacon1s.github.io/violetkey.github.io/)**
 
 ## 🔧 Установка (для разработчиков)
 
@@ -50,7 +50,7 @@ A modern, minimalist, and free keyboarding trainer designed for mastering the te
 
 You can start using the trainer immediately by visiting the live link:
 
-**[Go to VioletKey](https://sacon1s.github.io/)**
+**[Go to VioletKey](https://sacon1s.github.io/violetkey.github.io/)**
 
 ## 🔧 Local Setup (For Developers)
 
