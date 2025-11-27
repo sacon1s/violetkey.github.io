@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>violetkey</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0d0d12;
+            --sub-bg: #14141e;
+            --main-violet: #a855f7;
+            --text-main: #e2e8f0;
+            --text-dim: #475569;
+            --error: #ef4444;
+            --error-bg: rgba(239, 68, 68, 0.2);
+        }
+
+        body {
+            font-family: 'JetBrains Mono', monospace;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            text-transform: lowercase;
+            user-select: none;
+        }
+
+        .glow-text {
+            color: var(--main-violet);
+            text-shadow: 0 0 10px rgba(168, 85, 247, 0.5);
+        }
+
+        .typing-container {
+            position: relative;
+            width: 100%;
+            max-width: 900px;
+            height: 110px;
+            overflow: hidden;
+            mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+        }
+
+        .typing-content {
+            font-size: 1.7rem;
+            line-height: 1.6;
+            color: var(--text-dim);
+            display: flex;
+            flex-wrap: wrap;
+            align-content: flex-start;
+            transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+            will-change: transform;
+            padding-top: 5px;
+        }
+
+        .word {
+            margin-right: 0.8em;
+            margin-bottom: 0.3em;
+            display: flex;
+        }
+
+        .char {
+            position: relative;
+            border-bottom: 2px solid transparent;
+        }
+
+        .correct { color: var(--text-main); }
+        .incorrect { color: var(--error); background-color: var(--error-bg); border-radius: 2px; }
+
+        .caret {
+            position: absolute;
+            width: 3px;
+            height: 1.6rem;
+            background-color: var(--main-violet);
+            border-radius: 2px;
+            transition: left 0.1s ease, top 0.1s ease;
+            box-shadow: 0 0 8px var(--main-violet);
+            z-index: 20;
+            pointer-events: none;
+        }
+        .caret.idle { animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+        #typing-input {
+            position: absolute;
+            opacity: 0;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+
+        .btn-text {
+            color: var(--text-dim);
+            cursor: pointer;
+            transition: all 0.2s;
+            padding: 0 10px;
+        }
+        .btn-text:hover { color: var(--text-main); }
+        .btn-text.active { color: var(--main-violet); font-weight: bold; text-shadow: 0 0 5px rgba(168, 85, 247, 0.3); }
+    </style>
+</head>
+<body onclick="focusInput()">
+
+    <div id="welcome-overlay" class="fixed inset-0 bg-black/95 flex flex-col justify-center items-center z-50 transition-opacity duration-500 cursor-pointer">
+        <h1 class="text-7xl font-bold mb-4 tracking-tighter">
+            <span class="glow-text">violet</span>key
+        </h1>
+        <p class="text-gray-500 animate-pulse mt-4" id="welcome-message">tap to start</p>
+    </div>
+
+    <div id="app" class="w-full max-w-5xl px-8 flex flex-col items-center opacity-0 transition-opacity duration-500">
+
+        <div class="mb-12">
+             <h1 class="text-4xl font-bold tracking-tight">
+                <span class="glow-text">violet</span>key
+            </h1>
+        </div>
+
+        <div class="flex flex-col items-center bg-sub-bg/50 px-6 py-3 rounded-full mb-10 text-sm backdrop-blur-sm border border-white/5">
+            <div class="flex items-center gap-4">
+                <div class="flex">
+                    <button class="btn-text" onclick="setLang('ru')" id="lang-ru">ru</button>
+                    <button class="btn-text active" onclick="setLang('en')" id="lang-en">en</button>
+                </div>
+                <div class="w-px h-4 bg-gray-700"></div>
+                <div class="flex">
+                    <button class="btn-text active" onclick="setMode('time')" id="mode-time">time</button>
+                    <button class="btn-text" onclick="setMode('words')" id="mode-words">words</button>
+                </div>
+                <div class="w-px h-4 bg-gray-700"></div>
+                <div class="flex" id="options-container"></div>
+            </div>
+        </div>
+
+        <div class="w-full max-w-4xl mb-4 pl-2 flex justify-start items-end">
+            <div class="flex items-baseline gap-3">
+                <span id="main-counter" class="text-6xl font-bold glow-text leading-none">60</span>
+                <span id="counter-label" class="text-xl text-gray-500 font-medium">sec</span>
+            </div>
+        </div>
+
+        <div class="relative w-full max-w-4xl mb-2" onclick="focusInput()">
+            <div id="caret" class="caret idle"></div>
+
+            <div class="typing-container" id="container-box">
+                <div id="text-layer" class="typing-content">
+                </div>
+            </div>
+        </div>
+
+        <input id="typing-input" type="text" autocomplete="off">
+
+        <div class="flex justify-center gap-16 mt-12 text-gray-500 opacity-50 transition-opacity hover:opacity-100">
+             <div class="flex flex-col items-center">
+                 <span class="text-xs uppercase tracking-widest mb-1">wpm</span>
+                 <span id="live-wpm" class="text-2xl text-white">0</span>
+             </div>
+             <div class="flex flex-col items-center">
+                 <span class="text-xs uppercase tracking-widest mb-1">acc</span>
+                 <span id="live-acc" class="text-2xl text-white">100%</span>
+             </div>
+        </div>
+
+         <div class="w-full max-w-4xl mt-12 border-t border-gray-800 pt-6">
+            <h3 class="text-sm text-gray-600 mb-4">history</h3>
+            <div id="history-list" class="flex flex-wrap gap-4 text-sm"></div>
+        </div>
+    </div>
+
+    <div id="result-overlay" class="fixed inset-0 bg-black/80 backdrop-blur-md hidden z-40 flex justify-center items-center">
+        <div class="bg-sub-bg p-12 rounded-3xl border border-gray-800 text-center shadow-2xl">
+            <div class="text-gray-500 mb-2">wpm</div>
+            <div id="res-wpm" class="text-8xl font-bold glow-text mb-8">0</div>
+
+            <div class="grid grid-cols-3 gap-8 mb-10 text-left">
+                <div>
+                    <div class="text-gray-500 text-xs">acc</div>
+                    <div id="res-acc" class="text-2xl text-white">100%</div>
+                </div>
+                <div>
+                    <div class="text-gray-500 text-xs">chars</div>
+                    <div id="res-chars" class="text-2xl text-white">0</div>
+                </div>
+                <div>
+                    <div class="text-gray-500 text-xs">time</div>
+                    <div id="res-time" class="text-2xl text-white">0s</div>
+                </div>
+            </div>
+
+            <button onclick="restartTest()" class="px-8 py-3 bg-main-violet/10 text-main-violet border border-main-violet/50 hover:bg-main-violet hover:text-white rounded-xl transition duration-200">
+                restart test
+            </button>
+        </div>
+    </div>
+
+    <footer class="fixed bottom-4 text-xs text-gray-800 font-bold">violetkey 2025-2025</footer>
+
+    <script>
+        const wordsRu = ["привет", "мир", "как", "дела", "это", "тест", "скорость", "печати", "человек", "время", "работа", "слово", "жизнь", "день", "рука", "раз", "глаз", "вопрос", "дом", "место", "друг", "лицо", "сторона", "нога", "дверь", "земля", "конец", "час", "голос", "город", "вода", "стол", "сила", "отец", "женщина", "ночь", "право", "страна", "война", "вид", "ряд", "часть", "свет", "бог", "путь", "душа", "книга", "образ", "окно", "центр", "помощь", "век", "музыка", "автор", "проблема", "история", "закон", "лес", "имя", "мысль", "любовь", "взгляд", "письмо", "море", "берег", "сон", "мама", "язык", "солнце", "вечер", "качество", "вера", "факт", "срок", "момент", "школа", "цель", "воздух", "совет", "кровь", "герой", "база", "план", "речь", "народ", "голова", "смысл", "тело", "состояние", "утро", "ветер", "огонь", "лес", "поле", "край", "ошибка", "счастье", "действие", "надежда", "ответ", "форма", "число", "судьба", "камень", "бумага", "телефон", "отрасль", "область", "система", "объект", "палец", "память", "линия", "уровень", "машина", "наука", "опыт", "процесс", "задача", "развитие", "информация", "анализ", "результат", "сегодня", "завтра", "всегда", "никогда", "хорошо", "плохо", "быстро", "медленно", "громко", "тихо", "далеко", "близко", "много", "мало", "очень", "совсем", "снова", "вместе", "назад", "вперед", "внутри", "снаружи", "рядом", "вдоль", "среди", "около", "после", "до", "через", "под", "над", "за", "перед", "о", "об", "от", "из", "к", "по", "для", "без", "при", "про", "во", "со", "или", "но", "а", "и", "даже", "только", "уже", "еще", "вдруг", "затем", "также", "потом", "поэтому", "когда", "если", "чтобы", "пока", "хотя", "куда", "откуда", "зачем", "почему", "кто", "что", "какой", "чей", "который", "сколько", "такой", "свой", "наш", "ваш", "их", "его", "ее", "их", "мой", "твой", "себя", "сам", "друг", "друг", "каждый", "всякий", "любой", "иной", "один", "два", "три", "четыре", "пять", "шесть", "семь", "восемь", "девять", "десять", "первый", "второй", "третий", "новый", "старый", "большой", "маленький", "высокий", "низкий", "длинный", "короткий", "широкий", "узкий", "легкий", "тяжелый", "теплый", "холодный", "яркий", "темный", "быстрый", "медленный", "сильный", "слабый", "добрый", "злой", "веселый", "грустный", "красивый", "ужасный", "готовый", "нужный", "важный", "традиция", "предмет", "намерение", "возможность", "обязанность", "правило", "открытие", "технология", "культура", "разговор", "поколение", "событие", "отношение", "категория", "перспектива", "заявление", "аргумент", "источник", "комната", "здание", "площадь", "территория", "природа", "окружение", "здоровье", "безопасность", "деятельность", "участие", "предложение", "успех", "провал", "богатство", "бедность", "одежда", "обувь", "еда", "напиток", "путешествие", "отдых", "спорт", "искусство", "литература", "философия", "религия", "правительство", "экономика", "политика", "финансы", "торговля", "промышленность", "сельское", "хозяйство", "транспорт", "связь", "образование", "медицина", "военный", "космос", "география", "биология", "химия", "физика", "математика", "статистика", "программирование", "компьютер", "сеть", "интернет", "сайт", "приложение", "сервер", "клиент", "данные", "интерфейс", "алгоритм", "функция", "переменная", "класс", "метод", "облако", "криптовалюта", "блокчейн", "искусственный", "интеллект", "робот", "виртуальный", "реальность", "массив", "строка", "цикл", "условие", "ошибка", "отладка", "тестирование", "запуск", "проект", "команда", "документ", "отчет", "презентация", "встреча", "совещание", "планирование", "бюджет", "контракт", "договор", "клиент", "поставщик", "конкурент", "рынок", "бренд", "реклама", "маркетинг", "продажи", "услуга", "товар", "канал", "локация", "дизайн", "цвета", "шрифт", "звук", "сценарий", "режиссер", "актер", "зритель", "критик", "жанр", "роль", "игра", "победа", "поражение", "правильный", "ложный", "честный", "лживый", "мудрый", "глупый", "смелый", "трусливый", "щедрый", "скупой", "терпеливый", "нетерпеливый", "счастливый", "несчастный", "здоровый", "больной", "живой", "мертвый", "открытый", "закрытый", "полный", "пустой", "свободный", "занятый", "доступный", "недоступный", "удобный", "неудобный", "приятный", "неприятный", "забавный", "скучный", "интересный", "неинтересный", "простой", "сложный", "главный", "второстепенный", "личный", "общественный", "частный", "государственный", "международный", "местный", "северный", "южный", "восточный", "западный", "вероятный", "невероятный", "возможный", "невозможный", "определенный", "неопределенный", "достаточный", "недостаточный", "единый", "множественный", "разный", "одинаковый", "типичный", "уникальный", "обычный", "необычный", "актуальный", "устаревший", "будущий", "прошлый", "настоящий", "надежный", "ненадежный", "человеческий", "естественный", "искусственный", "конкретный", "абстрактный", "физический", "ментальный", "эмоциональный", "духовный", "сенсорный", "практический", "теоретический", "критический", "конструктивный", "положительный", "отрицательный", "нейтральный", "активный", "пассивный", "гибкий", "жесткий", "мягкий", "твердый", "жидкий", "газообразный", "шумный", "тихий", "чистый", "грязный", "горячий", "прохладный", "кислый", "сладкий", "горький", "соленый", "пряный", "вкусный", "безвкусный", "красный", "зеленый", "синий", "желтый", "оранжевый", "фиолетовый", "белый", "черный", "серый", "коричневый", "золотой", "серебряный", "медный", "прозрачный", "матовый", "блестящий", "тусклый", "громкий", "шепотный", "звуковой", "визуальный", "тактильный", "обонятельный", "вкусовой", "шероховатый", "гладкий", "колючий", "пушистый", "ароматный", "запах", "вкус", "свет", "тень", "цвет", "форма", "размер", "вес", "объем", "скорость", "сила", "энергия", "тепло", "холод", "давление", "звук", "шум", "тишина", "возраст", "время", "период", "секунда", "минута", "час", "день", "неделя", "месяц", "год", "век", "эпоха", "момент", "начало", "середина", "конец", "прошлое", "будущее", "настоящее", "событие", "явление", "процесс", "изменение", "движение", "рост", "падение", "увеличение", "уменьшение", "создание", "разрушение", "появление", "исчезновение", "преобразование", "объединение", "разделение", "сравнение", "анализ", "синтез", "теория", "практика", "опыт", "знание", "мудрость", "вера", "сомнение", "истина", "ложь", "правда", "вымысел", "реальность", "иллюзия", "осознание", "восприятие", "мышление", "память", "воображение", "чувство", "эмоция", "желание", "потребность", "мотивация", "цель", "план", "решение", "действие", "результат", "успех", "неудача", "счастье", "горе", "радость", "печаль", "гнев", "страх", "любовь", "ненависть", "дружба", "вражда", "доверие", "предательство", "уважение", "презрение", "сострадание", "равнодушие", "свобода", "зависимость", "власть", "подчинение", "закон", "порядок", "хаос", "справедливость", "несправедливость", "добро", "зло", "красота", "уродство", "гармония", "диссонанс", "единство", "разнообразие", "толерантность", "фанатизм", "личность", "общество", "культура", "цивилизация", "традиция", "инновация", "прогресс", "регресс", "развитие", "деградация", "рождение", "смерть", "жизнь", "существование", "бытие", "небытие", "сущность", "явление", "абсолют", "относительность", "бесконечность", "конечность", "пространство", "измерение", "граница", "центр", "периферия", "точка", "линия", "плоскость", "объем", "форма", "содержание", "структура", "организация", "система", "элемент", "связь", "отношение", "причина", "следствие", "закономерность", "случайность", "необходимость", "возможность", "вероятность", "достоверность", "факт", "гипотеза", "теорема", "аксиома", "доказательство", "опровержение", "анализ", "синтез", "дедукция", "индукция", "модель", "критерий", "оценка", "измерение", "контроль", "управление", "оптимизация", "автоматизация", "информатика", "кибернетика", "биотехнология", "нанотехнология", "экология", "геология", "астрономия", "метеорология", "океанология", "лингвистика", "социология", "психология", "антропология", "история", "археология", "этнография", "юриспруденция", "экономика", "политология", "военное", "дело", "искусство", "философия", "религия", "образование", "медицина", "транспорт", "связь", "энергетика", "строительство", "сельское", "хозяйство", "промышленность", "торговля", "финансы", "страхование", "туризм", "спорт", "средства", "массовой", "информации", "наука", "техника", "технология", "инновация", "открытие", "изобретение", "патент", "лицензия", "собственность", "конкуренция", "монополия", "олигополия", "спрос", "предложение", "цена", "стоимость", "прибыль", "убыток", "доход", "расход", "налог", "кредит", "депозит", "валюта", "рынок", "биржа", "акция", "облигация", "инвестиция", "риск", "стратегия", "тактика", "планирование", "прогноз", "анализ", "отчетность", "документация", "контракт", "договор", "переговоры", "решение", "согласие", "отказ", "конфликт", "компромисс", "сотрудничество", "партнерство", "команда", "лидер", "подчиненный", "руководитель", "менеджер", "сотрудник", "специалист", "консультант", "аудитор", "юрист", "бухгалтер", "секретарь", "водитель", "рабочий", "инженер", "программист", "дизайнер", "журналист", "писатель", "художник", "музыкант", "актер", "учитель", "врач", "полицейский", "военный", "пожарный", "спасатель", "спортсмен", "тренер", "студент", "школьник", "пенсионер", "домохозяйка", "безработный", "предприниматель", "бизнесмен", "миллионер", "миллиардер", "бедняк", "нищий", "богатый", "бедный", "успешный", "неудачник", "знаменитый", "неизвестный", "талантливый", "бездарный", "гениальный", "обычный", "умный", "глупый", "образованный", "невежда", "опытный", "новичок", "молодой", "старый", "взрослый", "ребенок", "мужчина", "женщина", "парень", "девушка", "семья", "родственник", "родитель", "ребенок", "супруг", "брат", "сестра", "дедушка", "бабушка", "внук", "внучка", "тетя", "дядя", "племянник", "племянница", "друг", "подруга", "коллега", "сосед", "знакомый", "незнакомец", "толпа", "одиночество", "общение", "разговор", "спор", "согласие", "приглашение", "встреча", "прощание", "поздравление", "извинение", "благодарность", "жалоба", "просьба", "приказ", "запрет", "разрешение", "обязательство", "ответственность", "свобода", "выбор", "решение", "действие", "бездействие", "риск", "безопасность", "надежность", "неуверенность", "уверенность", "оптимизм", "пессимизм", "реализм", "идеализм", "прагматизм", "романтизм", "цинизм", "наивность", "агрессия", "пассивность", "активность", "инициатива", "цель", "мотивация", "стимул", "потребность", "желание", "удовлетворение", "недовольство", "счастье", "несчастье", "радость", "грусть", "любовь", "ненависть", "страх", "мужество", "гнев", "спокойствие", "удивление", "равнодушие", "сочувствие", "жалость", "зависть", "восхищение", "презрение", "уважение", "гордость", "стыд", "вина", "раскаяние", "прощение", "месть", "вера", "сомнение", "надежда", "отчаяние", "истина", "ложь", "правда", "фантазия", "реальность", "сон", "бодрствование", "жизнь", "смерть", "здоровье", "болезнь", "красота", "уродство", "гармония", "хаос", "порядок", "беспорядок", "справедливость", "несправедливость", "добро", "зло", "свет", "тьма", "день", "ночь", "утро", "вечер", "весна", "лето", "осень", "зима", "тепло", "холод", "солнце", "луна", "звезда", "небо", "земля", "вода", "воздух", "огонь", "природа", "окружающая", "среда", "экология", "климат", "погода", "дождь", "снег", "ветер", "облако", "гроза", "радуга", "гора", "река", "озеро", "море", "океан", "лес", "поле", "пустыня", "остров", "полуостров", "континент", "страна", "город", "деревня", "дом", "здание", "улица", "дорога", "транспорт", "машина", "поезд", "самолет", "корабль", "велосипед", "автобус", "метро", "связь", "телефон", "интернет", "телевидение", "радио", "газета", "журнал", "книга", "библиотека", "школа", "университет", "музей", "театр", "кино", "концерт", "стадион", "парк", "площадь", "магазин", "рынок", "банк", "почта", "больница", "аптека", "полиция", "пожарная", "охрана", "армия", "правительство", "закон", "суд", "тюрьма", "религия", "церковь", "мечеть", "синагога", "храм", "бог", "дьявол", "ангел", "душа", "дух", "рай", "ад", "грех", "покаяние", "молитва", "праздник", "обычай", "традиция", "история", "культура", "искусство", "наука", "технология", "философия", "этика", "мораль", "смысл", "жизни", "смерть", "бесконечность", "вечность", "абсолют", "относительность", "парадокс", "загадка", "тайна", "чудо", "сюрприз", "ожидание", "разочарование", "надежда", "уныние", "оптимизм", "пессимизм", "вера", "скептицизм", "знание", "невежество", "мудрость", "глупость", "талант", "бездарность", "гений", "обыватель", "лидер", "последователь", "герой", "злодей", "святой", "грешник", "мученик", "тиран", "демократия", "диктатура", "свобода", "рабство", "мир", "война", "богатство", "бедность", "счастье", "несчастье", "любовь", "ненависть", "дружба", "вражда", "жизнь", "смерть", "начало", "конец", "рождение", "умирание"];
+        const wordsEn = ["the", "be", "to", "of", "and", "a", "in", "that", "have", "i", "it", "for", "not", "on", "with", "he", "as", "you", "do", "at", "this", "but", "his", "by", "from", "they", "we", "say", "her", "she", "or", "an", "will", "my", "one", "all", "would", "there", "their", "what", "so", "up", "out", "if", "about", "who", "get", "which", "go", "me", "when", "make", "can", "like", "time", "no", "just", "him", "know", "take", "people", "into", "year", "your", "good", "some", "could", "them", "see", "other", "than", "then", "now", "look", "only", "come", "its", "over", "think", "also", "back", "after", "use", "two", "how", "our", "work", "first", "well", "way", "even", "new", "want", "because", "any", "these", "give", "day", "most", "us", "many", "must", "down", "find", "here", "too", "has", "more", "through", "down", "before", "right", "where", "off", "put", "must", "such", "feel", "high", "every", "few", "turn", "why", "read", "hand", "port", "large", "spell", "add", "end", "land", "home", "much", "try", "kind", "list", "let", "air", "animal", "house", "point", "page", "mother", "answer", "found", "study", "still", "learn", "plant", "food", "sun", "four", "between", "state", "keep", "group", "tree", "never", "last", "city", "eyes", "light", "thought", "head", "under", "story", "saw", "left", "don't", "while", "might", "close", "something", "seem", "next", "hard", "open", "example", "begin", "life", "always", "those", "both", "paper", "together", "got", "ever", "service", "area", "across", "world", "today", "though", "less", "money", "talk", "soon", "come", "until", "better", "whole", "problem", "fact", "line", "case", "system", "present", "during", "later", "since", "game", "space", "form", "ever", "center", "major", "move", "change", "run", "miss", "full", "power", "side", "means", "love", "sure", "main", "face", "least", "sit", "deal", "drive", "true", "simply", "speak", "sound", "free", "ready", "build", "half", "behind", "piece", "manage", "return", "walk", "follow", "street", "reach", "wait", "sell", "pull", "stay", "act", "fall", "grow", "send", "expect", "touch", "fight", "agree", "meet", "finish", "stand", "stop", "appear", "watch", "raise", "pass", "expect", "join", "vote", "ring", "bear", "catch", "break", "wear", "hit", "fill", "lay", "cut", "rise", "band", "wish", "gain", "push", "save", "band", "seat", "cook", "fly", "lie", "win", "sing", "cost", "pick", "drop", "hurt", "pull", "kick", "jump", "send", "bank", "cold", "deep", "dark", "flat", "heavy", "loud", "short", "soft", "thick", "warm", "wide", "busy", "clean", "empty", "quick", "slow", "fresh", "kind", "brave", "funny", "great", "huge", "nice", "quiet", "small", "tasty", "young", "angry", "happy", "lucky", "sad", "sick", "tired", "wrong", "safe", "true", "usual", "able", "basic", "clear", "final", "ready", "usual", "whole", "common", "daily", "equal", "extra", "local", "legal", "moral", "north", "quick", "south", "west", "alive", "alone", "aware", "calm", "cool", "eager", "fast", "fierce", "glad", "grand", "ideal", "loose", "lucky", "magic", "plain", "proud", "smart", "solid", "sorry", "stiff", "tame", "tense", "vast", "wise", "worth", "about", "above", "along", "among", "below", "beside", "beyond", "close", "down", "inside", "near", "onto", "past", "round", "since", "until", "upon", "with", "without", "across", "before", "behind", "below", "except", "inside", "like", "outside", "since", "under", "upward", "around", "behind", "during", "though", "under", "unless", "until", "while", "above", "below", "down", "forth", "into", "next", "off", "over", "past", "then", "through", "today", "tomorrow", "tonight", "yesterday", "always", "ever", "never", "often", "once", "soon", "still", "usually", "almost", "enough", "even", "just", "mostly", "quite", "rather", "so", "too", "very", "about", "above", "below", "beyond", "inside", "near", "next", "off", "onto", "past", "round", "under", "upon", "with", "without", "across", "behind", "during", "except", "from", "like", "outside", "since", "through", "under", "unless", "until", "while", "among", "around", "before", "between", "except", "into", "near", "onto", "outside", "since", "through", "under", "until", "upon", "with", "without", "although", "because", "before", "if", "since", "that", "though", "unless", "until", "when", "where", "while", "who", "which", "what", "whom", "whose", "why", "how", "whether", "either", "neither", "both", "not", "only", "too", "very", "much", "more", "most", "less", "after", "again", "ago", "already", "away", "back", "even", "far", "fast", "maybe", "per", "sure", "then", "thus", "once", "twice", "thrice", "hello", "goodbye", "please", "thank", "sorry", "excuse", "welcome", "yes", "no", "maybe", "cheers", "bless", "damn", "help", "look", "stop", "wait", "come", "go", "get", "put", "take", "give", "make", "find", "tell", "ask", "call", "try", "need", "feel", "seem", "mean", "leave", "show", "hear", "play", "run", "move", "live", "believe", "bring", "happen", "write", "provide", "sit", "stand", "lose", "pay", "meet", "include", "continue", "set", "learn", "change", "lead", "understand", "watch", "follow", "stop", "create", "speak", "read", "allow", "add", "spend", "grow", "open", "walk", "win", "offer", "remember", "love", "consider", "appear", "buy", "wait", "serve", "die", "send", "expect", "build", "stay", "fall", "cut", "reach", "kill", "raise", "pass", "sell", "decide", "return", "explain", "hope", "develop", "carry", "break", "receive", "agree", "support", "hit", "produce", "eat", "face", "cover", "catch", "draw", "push", "check", "suffer", "suggest", "require", "report", "name", "join", "act", "deal", "wish", "save", "fight", "apply", "control", "share", "mark", "gain", "dream", "refer", "admit", "avoid", "imagine", "wear", "drink", "pull", "throw", "drive", "copy", "shop", "begin", "cost", "hold", "listen", "start", "teach", "travel", "visit", "work", "talk", "account", "amount", "budget", "charge", "credit", "debt", "deposit", "discount", "dollar", "expense", "finance", "income", "interest", "loan", "money", "payment", "profit", "rate", "salary", "spend", "value", "wage", "asset", "capital", "commerce", "company", "contract", "customer", "demand", "economy", "export", "import", "industry", "market", "partner", "product", "resource", "sale", "service", "supply", "trade", "unit", "business", "client", "employee", "manager", "meeting", "office", "project", "report", "team", "task", "goal", "plan", "strategy", "success", "failure", "risk", "security", "data", "database", "file", "network", "server", "software", "system", "technology", "code", "design", "developer", "hardware", "internet", "program", "screen", "user", "web", "computer", "device", "electric", "engine", "machine", "power", "switch", "tool", "wire", "air", "boat", "bus", "car", "drive", "flight", "fuel", "gas", "journey", "road", "ship", "train", "travel", "trip", "vehicle", "walk", "wheel", "address", "call", "card", "email", "letter", "message", "phone", "post", "signal", "voice", "word", "writer", "book", "chapter", "essay", "novel", "page", "paper", "pen", "read", "story", "text", "write", "art", "dance", "drama", "film", "music", "picture", "song", "stage", "theater", "show", "museum", "gallery", "event", "festival", "holiday", "party", "time", "date", "day", "hour", "minute", "month", "night", "second", "week", "year", "age", "birth", "death", "live", "period", "season", "today", "tomorrow", "yesterday", "weather", "cloud", "cold", "heat", "rain", "snow", "sun", "warm", "wind", "world", "earth", "country", "city", "town", "village", "home", "house", "area", "field", "forest", "land", "mountain", "ocean", "river", "street", "garden", "park", "space", "star", "tree", "plant", "animal", "bird", "cat", "dog", "fish", "food", "eat", "drink", "meal", "coffee", "tea", "water", "fruit", "meat", "sugar", "salt", "bread", "cheese", "color", "red", "blue", "green", "yellow", "black", "white", "gray", "light", "dark", "sound", "noise", "music", "voice", "loud", "quiet", "big", "small", "high", "low", "long", "short", "wide", "narrow", "deep", "shallow", "heavy", "light", "fast", "slow", "old", "new", "young", "easy", "hard", "simple", "complex", "good", "bad", "better", "worse", "best", "happy", "sad", "angry", "calm", "excited", "tired", "sleep", "awake", "health", "illness", "pain", "doctor", "hospital", "medicine", "care", "family", "friend", "love", "hate", "kind", "cruel", "polite", "rude", "true", "false", "sure", "maybe", "know", "think", "believe", "doubt", "learn", "teach", "study", "idea", "mind", "reason", "sense", "memory", "image", "dream", "magic", "spirit", "soul", "god", "faith", "hope", "power", "force", "energy", "control", "freedom", "law", "rule", "order", "chaos", "right", "wrong", "justice", "peace", "war", "battle", "weapon", "army", "police", "guard", "security", "danger", "safe", "risk", "chance", "luck", "fate", "future", "past", "present", "beginning", "end", "middle", "moment", "purpose", "goal", "plan", "way", "method", "tool", "use", "make", "create", "build", "destroy", "open", "close", "start", "stop", "change", "move", "put", "take", "give", "receive", "buy", "sell", "find", "lose", "win", "lose", "count", "number", "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "hundred", "thousand", "million", "first", "second", "third", "last", "next", "many", "few", "some", "all", "none", "each", "every", "other", "another", "same", "different", "similar", "opposite", "compare", "plus", "minus", "times", "divide", "equal", "amount", "total", "half", "whole", "part", "piece", "share", "group", "class", "sort", "type", "kind", "form", "shape", "size", "volume", "weight", "mass", "speed", "rate", "level", "degree", "quality", "value", "price", "cost", "money", "cash", "credit", "debt", "loan", "bank", "market", "trade", "sale", "buy", "shop", "store", "product", "service", "work", "job", "career", "skill", "talent", "effort", "success", "failure", "problem", "solution", "question", "answer", "request", "offer", "promise", "threat", "warning", "advice", "help", "support", "respect", "praise", "blame", "fault", "guilt", "shame", "pride", "honor", "duty", "task", "project", "plan", "schedule", "deadline", "meeting", "call", "email", "letter", "message", "report", "document", "file", "paper", "book", "magazine", "news", "story", "word", "language", "speak", "write", "read", "listen", "hear", "see", "look", "watch", "view", "show", "appear", "seem", "feel", "touch", "smell", "taste", "sound", "silence", "noise", "music", "art", "picture", "photo", "image", "color", "light", "shadow", "dark", "bright", "dim", "glow", "shine", "spark", "fire", "water", "air", "earth", "sky", "cloud", "rain", "snow", "wind", "storm", "sun", "moon", "star", "planet", "space", "world", "country", "city", "town", "village", "house", "home", "building", "room", "floor", "wall", "door", "window", "roof", "street", "road", "path", "park", "garden", "tree", "plant", "flower", "grass", "forest", "mountain", "hill", "river", "lake", "sea", "ocean", "beach", "sand", "rock", "stone", "metal", "wood", "glass", "paper", "cloth", "plastic", "rubber", "leather", "skin", "body", "head", "face", "eye", "ear", "nose", "mouth", "tooth", "tongue", "hand", "finger", "arm", "leg", "foot", "chest", "back", "heart", "blood", "bone", "hair", "skin", "health", "illness", "pain", "cure", "drug", "food", "drink", "meal", "hungry", "thirsty", "taste", "smell", "hot", "cold", "warm", "cool", "fire", "ice", "steam", "smoke", "air", "gas", "liquid", "solid", "shape", "form", "round", "square", "straight", "bent", "flat", "curved", "angle", "line", "point", "edge", "center", "side", "top", "bottom", "front", "back", "inside", "outside", "above", "below", "near", "far", "here", "there", "where", "when", "how", "why", "what", "who", "which", "whose", "whom", "this", "that", "these", "those", "it", "i", "you", "he", "she", "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "her", "our", "their", "mine", "yours", "hers", "ours", "theirs", "all", "some", "any", "no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety", "hundred", "thousand", "million", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "last", "next", "before", "after", "while", "since", "until", "when", "where", "how", "why", "what", "who", "which", "whose", "whom", "this", "that", "these", "those", "it", "i", "you", "he", "she", "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "her", "our", "their", "mine", "yours", "hers", "ours", "theirs", "all", "some", "any", "no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "hundred", "thousand", "million", "first", "second", "third", "last", "next", "always", "never", "often", "sometimes", "usually", "rarely", "already", "yet", "still", "just", "soon", "late", "early", "now", "then", "today", "tomorrow", "yesterday", "here", "there", "everywhere", "nowhere", "somewhere", "anywhere", "up", "down", "in", "out", "on", "off", "over", "under", "through", "around", "about", "with", "without", "before", "after", "during", "since", "until", "to", "from", "at", "by", "for", "of", "in", "on", "into", "onto", "out", "off", "up", "down", "over", "under", "through", "around", "about", "with", "without", "like", "as", "than", "but", "or", "and", "if", "unless", "because", "so", "that", "though", "although", "while", "when", "where", "how", "why", "what", "who", "which", "whose", "whom", "this", "that", "these", "those", "it", "i", "you", "he", "she", "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "her", "our", "their", "mine", "yours", "hers", "ours", "theirs", "all", "some", "any", "no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "hundred", "thousand", "million", "first", "second", "third", "last", "next", "always", "never", "often", "sometimes", "usually", "rarely", "already", "yet", "still", "just", "soon", "late", "early", "now", "then", "today", "tomorrow", "yesterday", "here", "there", "everywhere", "nowhere", "somewhere", "anywhere", "up", "down", "in", "out", "on", "off", "over", "under", "through", "around", "about", "with", "without", "like", "as", "than", "but", "or", "and", "if", "unless", "because", "so", "that", "though", "although", "while", "when", "where", "how", "why", "what", "who", "which", "whose", "whom", "this", "that", "these", "those", "it", "i", "you", "he", "she", "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "her", "our", "their", "mine", "yours", "hers", "ours", "theirs", "all", "some", "any", "no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "hundred", "thousand", "million", "first", "second", "third", "last", "next"];
+
+        let config = { lang: 'en', mode: 'time', val: 60 };
+        let state = {
+            active: false, startTime: 0, timer: null,
+            wordIndex: 0, charIndex: 0,
+            correctChars: 0, totalChars: 0, errors: 0, wordsTyped: 0,
+            wordObjects: [],
+            readyToType: false,
+            currentScroll: 0
+        };
+
+        const els = {
+            containerBox: document.getElementById('container-box'),
+            textLayer: document.getElementById('text-layer'),
+            input: document.getElementById('typing-input'),
+            caret: document.getElementById('caret'),
+            mainCounter: document.getElementById('main-counter'),
+            label: document.getElementById('counter-label'),
+            overlay: document.getElementById('result-overlay'),
+            app: document.getElementById('app'),
+            welcome: document.getElementById('welcome-overlay'),
+            welcomeMsg: document.getElementById('welcome-message'),
+            liveWpm: document.getElementById('live-wpm'),
+            liveAcc: document.getElementById('live-acc'),
+            history: document.getElementById('history-list')
+        };
+
+        function focusInput() {
+            if (state.readyToType && !els.input.disabled) {
+                els.input.focus();
+            }
+        }
+
+        function setLang(l) {
+            config.lang = l;
+            document.getElementById('lang-ru').className = `btn-text ${l==='ru'?'active':''}`;
+            document.getElementById('lang-en').className = `btn-text ${l==='en'?'active':''}`;
+            restartTest();
+        }
+        function setMode(m) {
+            config.mode = m;
+            if (![15, 30, 60, 120, 10, 25, 50, 100].includes(config.val)) config.val = m === 'time' ? 60 : 25;
+            document.getElementById('mode-time').className = `btn-text ${m==='time'?'active':''}`;
+            document.getElementById('mode-words').className = `btn-text ${m==='words'?'active':''}`;
+            renderOptions();
+            restartTest();
+        }
+        function setVal(v) { config.val = v; renderOptions(); restartTest(); }
+        function renderOptions() {
+            const opts = config.mode === 'time' ? [15, 30, 60, 120] : [10, 25, 50, 100];
+            const container = document.getElementById('options-container');
+            container.innerHTML = '';
+            opts.forEach(v => {
+                const btn = document.createElement('button');
+                btn.className = `btn-text ${config.val === v ? 'active' : ''}`;
+                btn.innerText = v;
+                btn.onclick = () => setVal(v);
+                container.appendChild(btn);
+            });
+            const custBtn = document.createElement('button');
+            custBtn.className = 'btn-text'; custBtn.innerText = 'custom';
+            custBtn.onclick = () => { const res = prompt('value?'); if(res && !isNaN(res)) setVal(parseInt(res)); };
+            container.appendChild(custBtn);
+            els.label.innerText = config.mode === 'time' ? 'sec' : 'words';
+        }
+
+        function restartTest() {
+            clearInterval(state.timer);
+            const wasReady = state.readyToType;
+            state = {
+                active: false, startTime: 0, timer: null,
+                wordIndex: 0, charIndex: 0,
+                correctChars: 0, totalChars: 0, errors: 0, wordsTyped: 0,
+                wordObjects: [],
+                readyToType: wasReady,
+                currentScroll: 0
+            };
+
+            els.textLayer.innerHTML = '';
+            els.textLayer.style.transform = 'translateY(0px)';
+            els.input.value = '';
+            els.input.disabled = !state.readyToType;
+            els.overlay.classList.add('hidden');
+            els.caret.classList.add('idle');
+            els.caret.style.display = 'block';
+
+            els.mainCounter.innerText = config.val;
+            if(config.mode === 'words') els.mainCounter.innerText = `0/${config.val}`;
+            els.liveWpm.innerText = '0';
+            els.liveAcc.innerText = '100%';
+
+            addWords(50);
+            requestAnimationFrame(() => { moveCaret(); if (state.readyToType) focusInput(); });
+        }
+
+        function getRandomWord() {
+            const pool = config.lang === 'ru' ? wordsRu : wordsEn;
+            return pool[Math.floor(Math.random() * pool.length)];
+        }
+
+        function addWords(count) {
+            const frag = document.createDocumentFragment();
+            for(let i=0; i<count; i++) {
+                const txt = getRandomWord();
+                const wordEl = document.createElement('div');
+                wordEl.className = 'word';
+                const chars = [];
+                txt.split('').forEach(c => {
+                    const sp = document.createElement('span');
+                    sp.className = 'char';
+                    sp.innerText = c;
+                    wordEl.appendChild(sp);
+                    chars.push(sp);
+                });
+                state.wordObjects.push({ element: wordEl, chars: chars, text: txt });
+                frag.appendChild(wordEl);
+            }
+            els.textLayer.appendChild(frag);
+        }
+
+        function startTimer() {
+            state.active = true;
+            state.startTime = Date.now();
+            els.caret.classList.remove('idle');
+
+            state.timer = setInterval(() => {
+                const now = Date.now();
+                const elapsed = (now - state.startTime) / 1000;
+                if (config.mode === 'time') {
+                    const left = Math.ceil(config.val - elapsed);
+                    els.mainCounter.innerText = left;
+                    if (left <= 0) finish();
+                } else {
+                    els.mainCounter.innerText = `${state.wordsTyped}/${config.val}`;
+                }
+                const wpm = Math.round((state.correctChars / 5) / (elapsed / 60)) || 0;
+                const acc = state.totalChars > 0 ? Math.round(((state.totalChars - state.errors) / state.totalChars) * 100) : 100;
+                els.liveWpm.innerText = wpm;
+                els.liveAcc.innerText = acc + '%';
+            }, 100);
+        }
+
+        function finish() {
+            clearInterval(state.timer);
+            state.active = false;
+            els.input.disabled = true;
+            els.caret.style.display = 'none';
+            const elapsed = (Date.now() - state.startTime) / 1000;
+            const wpm = Math.round((state.correctChars / 5) / (elapsed / 60)) || 0;
+            const acc = state.totalChars > 0 ? Math.round(((state.totalChars - state.errors) / state.totalChars) * 100) : 100;
+            document.getElementById('res-wpm').innerText = wpm;
+            document.getElementById('res-acc').innerText = acc + '%';
+            document.getElementById('res-chars').innerText = state.totalChars;
+            document.getElementById('res-time').innerText = Math.round(elapsed) + 's';
+            els.overlay.classList.remove('hidden');
+            saveToHistory(wpm, acc);
+        }
+
+        els.input.addEventListener('input', e => {
+            if(!state.readyToType) return;
+            if(!state.active && !els.input.disabled) startTimer();
+
+            const currWord = state.wordObjects[state.wordIndex];
+            const charTyped = e.data;
+            if (!charTyped) return;
+
+            if (charTyped === ' ') {
+                if (state.charIndex > 0) {
+                    state.wordIndex++;
+                    state.charIndex = 0;
+                    state.wordsTyped++;
+                    state.correctChars++;
+                    state.totalChars++;
+                    if(config.mode === 'words' && state.wordsTyped >= config.val) finish();
+                }
+            } else {
+                if (state.charIndex < currWord.chars.length) {
+                    const charEl = currWord.chars[state.charIndex];
+                    if (charTyped === currWord.text[state.charIndex]) {
+                        charEl.className = 'char correct';
+                        state.correctChars++;
+                    } else {
+                        charEl.className = 'char incorrect';
+                        state.errors++;
+                    }
+                    state.charIndex++;
+                    state.totalChars++;
+                } else {
+                    state.errors++;
+                }
+            }
+            if (state.wordObjects.length - state.wordIndex < 10) addWords(20);
+            moveCaret();
+            els.input.value = '';
+        });
+
+        window.addEventListener('keydown', e => {
+            if (els.input.disabled || !state.readyToType) return;
+            if (e.key === 'Backspace') {
+                e.preventDefault();
+                if (state.charIndex > 0) {
+                    state.charIndex--;
+                    const currWord = state.wordObjects[state.wordIndex];
+                    const charEl = currWord.chars[state.charIndex];
+                    state.totalChars--;
+                    if (charEl.classList.contains('incorrect')) state.errors--;
+                    else if (charEl.classList.contains('correct')) state.correctChars--;
+                    charEl.className = 'char';
+                } else if (state.wordIndex > 0) {
+                    state.wordIndex--;
+                    state.wordsTyped--;
+                    state.totalChars--;
+                    state.correctChars--;
+                    const prevWord = state.wordObjects[state.wordIndex];
+                    state.charIndex = prevWord.chars.length;
+                }
+                moveCaret();
+            }
+        });
+
+        function moveCaret() {
+            const currWord = state.wordObjects[state.wordIndex];
+            if (!currWord) return;
+
+            let targetEl;
+            if (state.charIndex < currWord.chars.length) {
+                targetEl = currWord.chars[state.charIndex];
+            } else {
+                targetEl = currWord.chars[currWord.chars.length - 1];
+            }
+
+            const refEl = targetEl || currWord.element;
+
+            const boxRect = els.containerBox.getBoundingClientRect();
+            const rect = refEl.getBoundingClientRect();
+
+            let left = rect.left - boxRect.left;
+            let top = rect.top - boxRect.top;
+
+            if (state.charIndex >= currWord.chars.length && targetEl) {
+                left += rect.width;
+            }
+
+            const SCROLL_THRESHOLD = 60;
+            const SCROLL_AMOUNT = 50;
+
+            const visualTopOffset = rect.top - boxRect.top;
+
+            if (visualTopOffset > SCROLL_THRESHOLD) {
+                state.currentScroll += SCROLL_AMOUNT;
+                els.textLayer.style.transform = `translateY(-${state.currentScroll}px)`;
+            }
+
+            const caretHeight = els.caret.getBoundingClientRect().height;
+
+            const charCenterY = rect.top + (rect.height / 2);
+
+            const targetCaretTopAbs = charCenterY - (caretHeight / 2);
+
+            top = targetCaretTopAbs - boxRect.top;
+
+            els.caret.style.top = top + 'px';
+            els.caret.style.left = left + 'px';
+        }
+
+        function saveToHistory(wpm, acc) {
+            const hist = JSON.parse(localStorage.getItem('violetkeyHist') || '[]');
+            hist.unshift({ wpm, acc, mode: config.mode, val: config.val });
+            localStorage.setItem('violetkeyHist', JSON.stringify(hist.slice(0, 8)));
+            renderHistory();
+        }
+        function renderHistory() {
+            const hist = JSON.parse(localStorage.getItem('violetkeyHist') || '[]');
+            const cont = els.history;
+            cont.innerHTML = '';
+            if(!hist.length) { cont.innerHTML = 'no history yet'; return; }
+            hist.forEach(h => {
+                const badge = document.createElement('div');
+                badge.className = 'px-3 py-1 bg-sub-bg rounded border border-gray-800 flex items-center gap-2';
+                badge.innerHTML = `<span class="text-white font-bold">${h.wpm}</span><span class="text-xs text-gray-500">${h.acc}%</span><span class="text-[10px] text-gray-600 border-l border-gray-800 pl-2">${h.mode} ${h.val}</span>`;
+                cont.appendChild(badge);
+            });
+        }
+
+        function init() {
+            renderOptions();
+            renderHistory();
+            restartTest();
+            els.app.classList.remove('opacity-0');
+            els.welcome.onclick = () => {
+                if (state.readyToType) return;
+                state.readyToType = true;
+                els.input.disabled = false;
+                els.welcome.style.opacity = '0';
+                setTimeout(() => { els.welcome.remove(); focusInput(); }, 500);
+            };
+            els.welcomeMsg.innerText = 'tap to start';
+        }
+
+        init();
+        window.onkeydown = e => { if(e.key==='F5'){ e.preventDefault(); restartTest(); } };
+    </script>
+</body>
+</html>
